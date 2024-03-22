@@ -8,6 +8,7 @@ public class Emulator {
     private SimpleStringProperty name;
     private SimpleBooleanProperty isRunning;
 
+
     public Emulator(Integer id, String name, boolean isRunning) {
         this.id = new SimpleIntegerProperty(id);
         this.name = new SimpleStringProperty(name);

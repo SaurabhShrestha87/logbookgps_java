@@ -31,8 +31,8 @@ public class ActionButtonCellFactory implements Callback<TableColumn<Emulator, B
                     //color
                     button.setStyle(item ? "-fx-background-color: red; -fx-text-fill: white;" : "-fx-background-color: green; -fx-text-fill: white;");
                     button.setOnAction(event -> {
-                        Boolean isRunning = getTableView().getItems().get(getIndex()).getIsRunning();
-                        Boolean success;
+                        boolean isRunning = getTableView().getItems().get(getIndex()).getIsRunning();
+                        boolean success;
                         if (isRunning) {
                             success = processService.stopEmulator(getTableView().getItems().get(getIndex()));
                         } else {
