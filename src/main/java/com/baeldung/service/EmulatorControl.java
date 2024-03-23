@@ -16,7 +16,7 @@ import java.util.concurrent.Flow;
 
 public class EmulatorControl {
     public void run(String authToken, String emulatorHost, int emulatorPort, String name) throws IOException, InterruptedException {
-        String sseUrl = "http://localhost:8080/emulator/sse/" + name;
+        String sseUrl = "https://logbookgps.com:8081/emulator/sse/" + name;
         System.out.println("Starting emulator control at port : " + emulatorPort);
         // Connect to the emulator
         Socket socket = new Socket(emulatorHost, emulatorPort);

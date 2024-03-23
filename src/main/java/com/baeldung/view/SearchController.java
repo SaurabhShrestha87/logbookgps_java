@@ -83,6 +83,14 @@ public class SearchController {
 
 
     private void loadData() {
+        List<Emulator> emulators = processService.getEmulatorsList();
+        // compare emulators to masterData, add any non matching name with isRunning = false and port incremented from the last port
+        emulators.stream().filter(value -> masterData.stream().noneMatch(value1 -> value1.getName().equals(value.getName()))).forEach(value -> {
+            value.setIsRunning(false);
+            value.setId(masterData.get(masterData.size() - 1).getId() + 1);
+            masterData.add(value);
+        });
+
         String searchText = searchField.getText();
 
         Task<ObservableList<Emulator>> task = new Task<ObservableList<Emulator>>() {
