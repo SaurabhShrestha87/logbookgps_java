@@ -16,7 +16,7 @@ public class ActionButtonCellFactory implements Callback<TableColumn<Emulator, B
 
     @Override
     public TableCell<Emulator, Boolean> call(TableColumn<Emulator, Boolean> param) {
-        return new TableCell<>() {
+        return new TableCell<Emulator, Boolean>() {
             final Button button = new Button();
 
             @Override

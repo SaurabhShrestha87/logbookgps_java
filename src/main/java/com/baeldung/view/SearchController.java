@@ -85,7 +85,7 @@ public class SearchController {
     private void loadData() {
         String searchText = searchField.getText();
 
-        Task<ObservableList<Emulator>> task = new Task<>() {
+        Task<ObservableList<Emulator>> task = new Task<ObservableList<Emulator>>() {
             @Override
             protected ObservableList<Emulator> call() {
                 updateMessage("Loading data");

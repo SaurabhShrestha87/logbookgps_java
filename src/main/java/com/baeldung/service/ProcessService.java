@@ -13,12 +13,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class ProcessService {
 
     private static ProcessService instance;
-
+    // Thread pool map to store the running emulators ** 20 threads for up-to 20 emulators **
+    Map<String, ExecutorService> emulatorThreadPool = new HashMap<>();
     Map<String, Process> runningEmulators = new HashMap<>();
 
     private ProcessService() {
@@ -32,6 +35,11 @@ public class ProcessService {
         return instance;
     }
 
+    private synchronized void connectEmulatorSseAndUpdate(Emulator emulator) throws IOException, InterruptedException {
+        EmulatorControl emulatorControl = new EmulatorControl();
+        emulatorControl.run("518XFP5YZ/85UOy7", "localhost", emulator.getId(), emulator.getName());
+    }
+
     public Boolean startEmulator(Emulator emulator) {
         if (runningEmulators.containsKey(emulator.getName())) {
             return true;
@@ -42,55 +50,50 @@ public class ProcessService {
             ProcessBuilder builder = new ProcessBuilder("emulator", "-port", String.valueOf(emulator.getId()), "-avd", emulator.getName());
             process = builder.start();
             final Process finalProcess = process;
-            new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(finalProcess.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.contains("Successfully loaded snapshot")) {
-                            runningEmulators.put(emulator.getName(), finalProcess);
-                        }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(finalProcess.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(line);
+                    if (line.contains("Successfully loaded snapshot") || line.contains("Boot completed")) {
+                        System.out.println("Emulator started");
+                        runningEmulators.put(emulator.getName(), finalProcess);
+                        break;
+
                     }
-                    // connect to an SSE EndPoint to get the emulator data and send it to the UI
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/emulator/sse/" + emulator.getName())).build();
-                    client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(HttpResponse::body).thenAccept(data -> {
-                        JSONObject jsonObject = null;
-                        try {
-                            jsonObject = new JSONObject(data);
-                            double lat = jsonObject.getDouble("lat");
-                            double lon = jsonObject.getDouble("lon");
-                            System.out.println("Lat: " + lat + " Lon: " + lon);
-                        } catch (JSONException e) {
-                            System.out.println("Error while parsing JSON" + e.getMessage());
-                            throw new RuntimeException(e);
-                        }
-                    });
-                    Process emulatorTelnetProcess = new ProcessBuilder("telnet", "localhost", "5554").start();
-                    //auth
-                    emulatorTelnetProcess.getOutputStream().write("auth 518XFP5YZ/85UOy7".getBytes());
-                    // loop till thread is interrupted
-                    while (!Thread.currentThread().isInterrupted()) {
-                        emulatorTelnetProcess.getOutputStream().write("geo fix 13.0827 80.2707\n".getBytes());
-                        Thread.sleep(1000);
-                    }
-                } catch (IOException | InterruptedException e) {
-                    throw new RuntimeException("Error while reading emulator output", e);
                 }
-            }).start();
+                // execute the emulator control in a new thread and add to the thread pool map
+                ExecutorService executorService = Executors.newSingleThreadExecutor();
+                emulatorThreadPool.put(emulator.getName(), executorService);
+                executorService.execute(() -> {
+                    try {
+                        connectEmulatorSseAndUpdate(emulator);
+                    } catch (IOException | InterruptedException e) {
+                        e.printStackTrace();
+                        throw new RuntimeException("Error while reading emulator output", e);
+                    }
+                });
+            } catch (IOException e) {
+                e.printStackTrace();
+                throw new RuntimeException("Error while reading emulator output", e);
+            }
             return true;
         } catch (IOException e) {
+            e.printStackTrace();
             throw new RuntimeException("Error while starting emulator", e);
         }
     }
 
     public Boolean stopEmulator(Emulator emulator) {
         try {
-            if (!runningEmulators.containsKey(emulator.getName())) {
-                return true;
+            if (runningEmulators.containsKey(emulator.getName())) {
+                Process process = runningEmulators.get(emulator.getName());
+                process.destroyForcibly();
+                runningEmulators.remove(emulator.getName());
             }
-            Process process = runningEmulators.get(emulator.getName());
-            process.destroyForcibly();
-            runningEmulators.remove(emulator.getName());
+            if (emulatorThreadPool.containsKey(emulator.getName())) {
+                emulatorThreadPool.get(emulator.getName()).shutdownNow();
+                emulatorThreadPool.remove(emulator.getName());
+            }
         } catch (Exception e) {
             System.out.println("Error while stopping emulator" + e.getMessage());
             return false;
@@ -130,6 +133,26 @@ public class ProcessService {
         String output = new String(inputStream.readAllBytes());
         // split the output by new line and filter out lines that are empty or more than 10 characters
         return Arrays.stream(output.split("\n")).filter(line -> !line.isEmpty() && line.length() <= 40).collect(Collectors.toList());
+    }
+
+    public void connectEmulatorToSSERequest(String emulatorName) throws IOException, InterruptedException {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/emulator/sse/" + emulatorName)).build();
+        System.out.println("Connecting to SSE");
+        client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(HttpResponse::body).thenAccept(data -> {
+            JSONObject jsonObject = null;
+            try {
+                jsonObject = new JSONObject(data);
+                double lat = jsonObject.getDouble("lat");
+                double lon = jsonObject.getDouble("lon");
+                System.out.println("Lat: " + lat + " Lon: " + lon);
+            } catch (JSONException e) {
+                System.out.println("Error while parsing JSON" + e.getMessage());
+                throw new RuntimeException(e);
+            }
+        });
+        // wait for the response
+        Thread.sleep(1000);
     }
 
 }
