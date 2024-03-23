@@ -15,30 +15,67 @@ import java.net.http.HttpResponse;
 import java.util.concurrent.Flow;
 
 public class EmulatorControl {
-    public void run(String authToken, String emulatorHost, int emulatorPort, String name) throws IOException, InterruptedException {
+
+    boolean running = true;
+    HttpClient client = HttpClient.newHttpClient();
+    HttpRequest request;
+
+    Socket socket;
+    PrintWriter writer;
+
+    public void run(String emulatorHost, int emulatorPort, String name) {
+        String authToken = "518XFP5YZ/85UOy7";
         String sseUrl = "https://logbookgps.com:8081/emulator/sse/" + name;
         System.out.println("Starting emulator control at port : " + emulatorPort);
-        // Connect to the emulator
-        Socket socket = new Socket(emulatorHost, emulatorPort);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+        try {
+            // Connect to the emulator
+            socket = new Socket(emulatorHost, emulatorPort);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            writer = new PrintWriter(socket.getOutputStream(), true);
 
-        // Wait for the initial prompt
-        String prompt = reader.readLine();
-        System.out.println(prompt);
+            // Wait for the initial prompt
+            String prompt = reader.readLine();
+            System.out.println(prompt);
 
-        // Send authentication command
-        writer.println("auth " + authToken);
-        System.out.println("Authentication command sent.");
+            // wait till we get OK in reader within 10 next lines
+            for (int i = 0; i < 10; i++) {
+                if (prompt.equals("OK")) {
+                    break;
+                }
+                prompt = reader.readLine();
+                System.out.println(prompt);
+            }
 
-        // Wait for the authentication response
-        prompt = reader.readLine();
-        System.out.println(prompt);
+            // Send authentication command
+            writer.println("auth " + authToken);
+            System.out.println("Authentication command sent.");
 
+            // Wait for the authentication response
+            prompt = reader.readLine();
+            System.out.println(prompt);
+            enableSse(sseUrl);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            while (running) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            // Close the socket
+            if (socket != null) try {
+                socket.close();
+            } catch (IOException e) {
+                System.out.println("Error while closing the socket: " + e.getMessage());
+            }
+        }
+    }
+
+    private void enableSse(String sseUrl) {
         // Create HttpClient and HttpRequest for the SSE endpoint
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(sseUrl)).header("Accept", "text/event-stream").build();
-
+        request = HttpRequest.newBuilder().uri(URI.create(sseUrl)).header("Accept", "text/event-stream").build();
         // Send the request and handle the response synchronously
         client.sendAsync(request, HttpResponse.BodyHandlers.fromLineSubscriber(new Flow.Subscriber<String>() {
             @Override
@@ -65,7 +102,7 @@ public class EmulatorControl {
                             double latitude = latLng.getDouble("latitude");
                             double longitude = latLng.getDouble("longitude");
                             double bearing = latLng.getDouble("bearing");
-                            System.out.println("Received location update: " + latitude + ", " + longitude + " (bearing: " + bearing + ")");
+                            System.out.println(sseUrl + "latLng: " + latitude + ", " + longitude + " (bearing: " + bearing + ")");
                             writer.println("geo fix " + longitude + " " + latitude);
                         } else {
                             System.out.println("Received status: " + status);
@@ -78,21 +115,16 @@ public class EmulatorControl {
 
             @Override
             public void onError(Throwable throwable) {
-                throwable.printStackTrace();
+                System.out.println(sseUrl + "Error while receiving SSE event: " + throwable.getMessage());
+                running = false;
             }
 
             @Override
             public void onComplete() {
-                System.out.println("SSE connection closed.");
+                running = false;
+                System.out.println(sseUrl + " : SSE connection closed : ");
             }
         }));
 
-        // Keep the method running until the current thread is interrupted
-        while (!Thread.currentThread().isInterrupted()) {
-            Thread.sleep(1000); // Delay for 1 second
-        }
-
-        // Close the socket
-        socket.close();
     }
 }

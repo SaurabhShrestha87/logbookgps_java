@@ -37,7 +37,7 @@ public class ProcessService {
 
     private synchronized void connectEmulatorSseAndUpdate(Emulator emulator) throws IOException, InterruptedException {
         EmulatorControl emulatorControl = new EmulatorControl();
-        emulatorControl.run("518XFP5YZ/85UOy7", "localhost", emulator.getId(), emulator.getName());
+        emulatorControl.run("localhost", emulator.getId(), emulator.getName());
     }
 
     public Boolean startEmulator(Emulator emulator) {
