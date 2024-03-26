@@ -24,7 +24,9 @@ public class EmulatorControl {
     BufferedReader reader;
 
     public void run(int emulatorPort, String name) {
-        String authToken = "518XFP5YZ/85UOy7";
+        // saurabh == 518XFP5YZ/85UOy7
+        // pavlo == yiRczGu7CUqu62P7
+        String authToken = "yiRczGu7CUqu62P7";
         String sseUrl = "https://logbookgps.com:8081/emulator/sse/" + name;
         try {
             process = new ProcessBuilder("telnet", "localhost", String.valueOf(emulatorPort)).start();
