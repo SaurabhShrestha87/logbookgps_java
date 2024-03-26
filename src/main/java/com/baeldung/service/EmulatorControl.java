@@ -7,73 +7,67 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.concurrent.Flow;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class EmulatorControl {
-
-    boolean running = true;
-    HttpClient client = HttpClient.newHttpClient();
     HttpRequest request;
+    Logger logger = Logger.getLogger(EmulatorControl.class.getName());
+    Process process;
 
-    Socket socket;
     PrintWriter writer;
+    BufferedReader reader;
 
-    public void run(String emulatorHost, int emulatorPort, String name) {
+    public void run(int emulatorPort, String name) {
         String authToken = "518XFP5YZ/85UOy7";
         String sseUrl = "https://logbookgps.com:8081/emulator/sse/" + name;
-        System.out.println("Starting emulator control at port : " + emulatorPort);
         try {
-            // Connect to the emulator
-            socket = new Socket(emulatorHost, emulatorPort);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            writer = new PrintWriter(socket.getOutputStream(), true);
-
+            process = new ProcessBuilder("telnet", "localhost", String.valueOf(emulatorPort)).start();
+            logger.log(Level.INFO, name + " made socket: " + emulatorPort);
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            logger.log(Level.INFO, name + " made reader: " + emulatorPort);
+            writer = new PrintWriter(process.getOutputStream(), true);
+            logger.log(Level.INFO, name + " made writer: " + emulatorPort);
             // Wait for the initial prompt
+            logger.log(Level.INFO, name + " : Waiting for telnet connection");
             String prompt = reader.readLine();
-            System.out.println(prompt);
-
             // wait till we get OK in reader within 10 next lines
             for (int i = 0; i < 10; i++) {
                 if (prompt.equals("OK")) {
+                    logger.log(Level.INFO, name + " : Ok received.");
                     break;
                 }
                 prompt = reader.readLine();
-                System.out.println(prompt);
             }
 
             // Send authentication command
             writer.println("auth " + authToken);
-            System.out.println("Authentication command sent.");
-
-            // Wait for the authentication response
-            prompt = reader.readLine();
-            System.out.println(prompt);
-            enableSse(sseUrl);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } finally {
-            while (running) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+            logger.log(Level.INFO, name + " : Authentication command sent.");
+            for (int i = 0; i < 10; i++) {
+                if (prompt.equals("OK")) {
+                    logger.log(Level.INFO, name + " : Ok received.");
+                    break;
+                }
+                prompt = reader.readLine();
+                if (i == 9) {
+                    throw new RuntimeException("Error while authenticating emulator");
                 }
             }
-            // Close the socket
-            if (socket != null) try {
-                socket.close();
-            } catch (IOException e) {
-                System.out.println("Error while closing the socket: " + e.getMessage());
-            }
+            enableSse(sseUrl, writer, reader);
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, name + " : Error while running emulator control", e);
+            throw new RuntimeException("Error while running emulator control", e);
         }
     }
 
-    private void enableSse(String sseUrl) {
+    private void enableSse(String sseUrl, PrintWriter writer, BufferedReader reader) {
+        HttpClient client = HttpClient.newHttpClient();
+        logger.log(Level.WARNING, sseUrl + " : Enabling SSE");
         // Create HttpClient and HttpRequest for the SSE endpoint
         request = HttpRequest.newBuilder().uri(URI.create(sseUrl)).header("Accept", "text/event-stream").build();
         // Send the request and handle the response synchronously
@@ -85,46 +79,72 @@ public class EmulatorControl {
 
             @Override
             public void onNext(String item) {
-                System.out.println("Received SSE event: " + item); // data:{"status":"SUCCESS","latLng":{"latitude":37.74685445267021,"longitude":-122.48616612392027,"bearing":0.0}}
-                // check for heartbeats
-                if (item.isEmpty()) {
-                    return;
-                }
-                if (item.startsWith(":")) {
-                    return;
-                }
-                if (item.startsWith("data:")) {
-                    try {
-                        JSONObject json = new JSONObject(item.substring(5));
-                        String status = json.getString("status");
-                        if (status.equals("SUCCESS")) {
-                            JSONObject latLng = json.getJSONObject("latLng");
-                            double latitude = latLng.getDouble("latitude");
-                            double longitude = latLng.getDouble("longitude");
-                            double bearing = latLng.getDouble("bearing");
-                            System.out.println(sseUrl + "latLng: " + latitude + ", " + longitude + " (bearing: " + bearing + ")");
-                            writer.println("geo fix " + longitude + " " + latitude);
-                        } else {
-                            System.out.println("Received status: " + status);
+                synchronized (writer) {
+                    logger.log(Level.INFO, sseUrl + " : Received SSE event: " + item);
+                    // check for heartbeats
+                    if (item.isEmpty()) {
+                        return;
+                    }
+                    if (item.startsWith(":")) {
+                        return;
+                    }
+                    if (item.startsWith("data:")) {
+                        try {
+                            JSONObject json = new JSONObject(item.substring(5));
+                            String status = json.getString("status");
+                            if (status.equals("SUCCESS")) {
+                                JSONObject latLng = json.getJSONObject("latLng");
+                                double latitude = latLng.getDouble("latitude");
+                                double longitude = latLng.getDouble("longitude");
+                                double bearing = latLng.getDouble("bearing");
+                                logger.log(Level.INFO, sseUrl + " : Received location: " + latitude + ", " + longitude + ", " + bearing);
+                                writer.println("geo fix " + longitude + " " + latitude);
+                                synchronized (reader) {
+                                    logger.info(sseUrl + " : Location set successfully : " + reader.readLine());
+                                }
+                            } else {
+                                logger.log(Level.WARNING, sseUrl + " : Error while receiving location: " + json.getString("message"));
+                            }
+                        } catch (JSONException e) {
+                            logger.log(Level.SEVERE, sseUrl + " : Error while parsing JSON", e);
+                            throw new RuntimeException("Error while parsing JSON", e);
+                        } catch (IOException e) {
+                            logger.log(Level.SEVERE, sseUrl + " : Error while reading output", e);
+                            throw new RuntimeException("Error while reading output", e);
                         }
-                    } catch (JSONException e) {
-                        System.out.println("Error while parsing JSON: " + e.getMessage());
                     }
                 }
             }
 
             @Override
             public void onError(Throwable throwable) {
-                System.out.println(sseUrl + "Error while receiving SSE event: " + throwable.getMessage());
-                running = false;
+                logger.log(Level.SEVERE, sseUrl + " : Error while receiving SSE event", throwable);
+                throw new RuntimeException("Error while receiving SSE event", throwable);
             }
 
             @Override
             public void onComplete() {
-                running = false;
-                System.out.println(sseUrl + " : SSE connection closed : ");
+                logger.log(Level.INFO, sseUrl + " : SSE connection closed");
             }
         }));
+    }
 
+    public void stop() {
+        request = null;
+        if (writer != null) {
+            writer.println("exit");
+            writer.close();
+        }
+        if (reader != null) {
+            try {
+                reader.close();
+            } catch (IOException e) {
+                logger.log(Level.SEVERE, "Error while closing reader", e);
+                throw new RuntimeException("Error while closing reader", e);
+            }
+        }
+        if (process != null) {
+            process.destroyForcibly();
+        }
     }
 }
