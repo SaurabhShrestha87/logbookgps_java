@@ -6,6 +6,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -133,7 +136,18 @@ public class ProcessService {
         return emulators;
     }
 
-
+    public String getEmulatorConsoleAuthToken() {
+        // return the text from the file at the path ~/.emulator_console_auth_token
+        Path path = Paths.get(System.getProperty("user.home"), ".emulator_console_auth_token");
+        if (Files.exists(path)) {
+            try {
+                return Files.readString(path);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return null;
+    }
     private List<String> readOutput(InputStream inputStream) throws IOException {
         // read the output from the input stream and save as a list of strings
         String output = new String(inputStream.readAllBytes());

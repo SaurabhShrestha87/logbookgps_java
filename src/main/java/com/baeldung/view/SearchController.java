@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class SearchController {
-
+    public static String authToken = null;
     private final ProcessService processService;
     private final ObservableList<Emulator> masterData = FXCollections.observableArrayList();
     @FXML
@@ -58,6 +58,8 @@ public class SearchController {
     }
 
     private void initData() {
+        authToken = processService.getEmulatorConsoleAuthToken();
+        System.out.println("Auth token: " + authToken);
         List<Emulator> emulators = processService.getEmulatorsList();
         masterData.addAll(emulators);
     }

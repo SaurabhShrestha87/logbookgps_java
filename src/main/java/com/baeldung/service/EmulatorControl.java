@@ -15,6 +15,8 @@ import java.util.concurrent.Flow;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.baeldung.view.SearchController.authToken;
+
 public class EmulatorControl {
     HttpRequest request;
     Logger logger = Logger.getLogger(EmulatorControl.class.getName());
@@ -26,7 +28,6 @@ public class EmulatorControl {
     public void run(int emulatorPort, String name) {
         // saurabh == 518XFP5YZ/85UOy7
         // pavlo == yiRczGu7CUqu62P7
-        String authToken = "yiRczGu7CUqu62P7";
         String sseUrl = "https://logbookgps.com:8081/emulator/sse/" + name;
         try {
             process = new ProcessBuilder("telnet", "localhost", String.valueOf(emulatorPort)).start();

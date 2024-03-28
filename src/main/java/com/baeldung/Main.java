@@ -5,15 +5,20 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.layout.AnchorPane;
 import javafx.stage.Stage;
+
+import java.util.List;
+import java.util.Map;
+
 public class Main extends Application {
     public static void main(String[] args) {
         launch(args);
     }
+
     @Override
     public void start(Stage primaryStage) throws Exception {
 
         FXMLLoader loader = new FXMLLoader(Main.class.getResource("/SearchController.fxml"));
-        AnchorPane page = (AnchorPane) loader.load();
+        AnchorPane page = loader.load();
         Scene scene = new Scene(page);
 
         scene.getStylesheets().add("/search.css");
@@ -21,6 +26,5 @@ public class Main extends Application {
         primaryStage.setTitle("Title goes here");
         primaryStage.setScene(scene);
         primaryStage.show();
-
     }
 }
