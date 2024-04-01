@@ -1,0 +1,13 @@
+// Installation :
+
+1. sh install.sh
+
+2. source ~/.bashrc
+
+3. sudo apt install adb
+   (enter password)
+   (enter Y)
+
+// Run application with this command :
+
+4. java -jar --module-path javafx-sdk-17.0.10/lib --add-modules javafx.controls,javafx.fxml javafx_jar.jar
