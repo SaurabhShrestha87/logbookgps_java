@@ -16,7 +16,7 @@ echo 'export ANDROID_EMULATOR_HOME=$ANDROID_HOME/emulator' >> ~/.bashrc
 echo 'export ANDROID_AVD_HOME=$ANDROID_HOME/.android/avd' >> ~/.bashrc
 
 # Add the Android SDK tools to the PATH
-echo 'export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools' >> ~/.bashrc
+echo 'export PATH=$PATH:$ANDROID_HOME/emulator' >> ~/.bashrc
 
 # Inform the user to source the ~/.bashrc file manually
 source ~/.bashrc
